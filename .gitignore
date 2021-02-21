@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+# mat file
+*.mat
+
+# log folder
+logs/
+
 # Distribution / packaging
 .Python
 build/
