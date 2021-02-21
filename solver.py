@@ -1,4 +1,5 @@
 import os
+import json
 import time
 import scipy.io as sio
 import numpy as np
@@ -34,8 +35,6 @@ class Solver():
         self.net_input_set = get_input_manifold(opt.input_type, opt.num_cycle, self.Nfr).to(self.dev)
         
         p = get_params(opt.opt_over, self.net, self.net_input_set)
-        s  = sum([np.prod(list(pnb.size())) for pnb in p]);
-        print ('# params: %d' % s)
         
         if opt.input_type.endswith('mapping'):
             self.mapnet = module.MappingNet(opt).to(self.dev)            
@@ -61,7 +60,8 @@ class Solver():
         
 
         self.t1, self.t2 = None, None
-        self.best_psnr, self.best_step = 0, 0
+        self.best_psnr, self.best_psnr_step = 0, 0
+        self.best_ssim, self.best_ssim_step = 0, 0
 
     def fit(self):
         opt = self.opt
@@ -115,7 +115,8 @@ class Solver():
             step += 1
             self.step = step
         
-        self.writer.close()        
+        self.writer.close()   
+        self.save_video()
                 
     def summary_and_save(self, step, out_sp, idx_fr):        
         max_steps = self.opt.max_steps
@@ -161,7 +162,7 @@ class Solver():
         curr_lr = self.scheduler.get_lr()[0]
         eta = (self.t2-self.t1) * (max_steps-step) /self.opt.save_period / 3600
         print("[{}/{}] {:.2f} {:.4f} (Best PSNR: {:.2f} SSIM {:.4f} @ {} step) LR: {}, ETA: {:.1f} hours"
-            .format(step, max_steps, psnr_val, ssim_val, self.best_psnr, self.best_ssim, self.best_step,
+            .format(step, max_steps, psnr_val, ssim_val, self.best_psnr, self.best_ssim, self.best_psnr_step,
              curr_lr, eta))
 
         self.t1 = time.time()
@@ -191,20 +192,53 @@ class Solver():
                 'net_state_dict': self.net.state_dict(), 
                 'optimizer_state_dict': self.optimizer.state_dict(),
                 'scheduler_state_dict': self.scheduler.state_dict(),
+                }
+        best_scores = {
                 'best_psnr': self.best_psnr,
                 'best_ssim': self.best_ssim,
                 'best_psnr_step': self.best_psnr_step,
                 'best_ssim_step': self.best_ssim_step,
                 }
-        
         if self.opt.input_type.endswith('mapping'):            
             ckptdict['mapnet_state_dict']: self.mapnet.state_dict() 
                 
         torch.save(ckptdict, save_path)
+        with open(os.path.join(self.opt.ckpt_root, 'best_scores.json'), 'w') as f:
+            json.dump(best_scores, f)
         
-    def save_video(self, opt):
-        raise NotImplementedError("error")
-        return 
+    def save_video(self):
+        
+        #h5 save
+        ims = []
+        inp = []
+
+        for idx_fr in range(self.Nfr):
+            net_input_fr=self.net_input_set[idx_fr,:,:,:][np.newaxis,:,:,:]
+            out_HR_np = torch_to_np(self.net(net_input_fr))
+            net_input_fr=torch_to_np(net_input_fr)
+            ims.append(out_HR_np)
+            inp.append(net_input_fr)
+
+        f = h5py.File(os.path.join(self.opt.ckpt_root, 'final.h5'),'w')
+        f.create_dataset('input',data=inp,dtype=np.float32)
+        f.create_dataset('data',data=ims,dtype=np.float32)
+        f.create_dataset('angle',data=self.set_ang,dtype=np.float32)
+        f.close()
+        print('h5 file saved.')
+        
+        print('creating video.')
+        fig = plt.figure(figsize=(10, 10))
+        vid = []
+        for idx_fr in range(self.Nfr):
+            tmp_ims=np.sqrt(ims[idx_fr][0,:,:]**2+ims[idx_fr][1,:,:]**2)
+            tmp_ims -= tmp_ims.min()
+            tmp_ims /= tmp_ims.max()    
+            ttl = plt.text(128, -5, idx_fr, horizontalalignment='center', fontsize = 20)
+            vid.append([plt.imshow(tmp_ims, animated=True, cmap = 'gray', vmax=0.5),ttl])
+        ani = animation.ArtistAnimation(fig, vid, interval=50, blit=True, repeat_delay=1000)
+
+        ani.save(self.opt.ckpt_root+'/final_video.mp4')
+        print('video saved')
     
     def prepare_dataset(self):   
         fname = self.opt.fname
