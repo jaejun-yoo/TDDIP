@@ -1,8 +1,3 @@
-"""
-CutBlur
-Copyright 2020-present NAVER corp.
-MIT license
-"""
 import argparse
 import os
 import numpy as np
