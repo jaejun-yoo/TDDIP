@@ -10,14 +10,15 @@ from solver import Solver
 from IPython.core.debugger import set_trace
 def main():
     opt = get_option()
-    
-    os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"    
-    torch.cuda.set_device(1)
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark =True
-    torch.manual_seed(opt.seed)
 
-    print("Current device: idx%s | %s" %(torch.cuda.current_device(), torch.cuda.get_device_name(torch.cuda.current_device())))
+    if torch.cuda.is_available(): 
+        os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"    
+        torch.cuda.set_device(1)
+        torch.backends.cudnn.enabled = True
+        torch.backends.cudnn.benchmark =True
+        print("Current device: idx%s | %s" %(torch.cuda.current_device(), torch.cuda.get_device_name(torch.cuda.current_device())))
+        
+    torch.manual_seed(opt.seed)
 
     module = importlib.import_module("models.{}".format(opt.model.lower()))
 
