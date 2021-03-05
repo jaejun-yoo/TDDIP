@@ -14,7 +14,6 @@ from thop import profile
 import scipy.io as sio
 from option import get_option
 from solver import Solver
-from benchmarking.flop_counter import *
 from utils.common_utils import get_input_manifold
 
 from IPython.core.debugger import set_trace
