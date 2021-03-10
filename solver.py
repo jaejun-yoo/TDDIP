@@ -13,7 +13,7 @@ from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 
 from utils.common_utils import *
-from Mypnufft_mc_func_cardiac import *
+from Mypnufft_mc_func_grasp_norm_v2 import *
 
 import h5py
 import matplotlib.pyplot as plt
@@ -73,7 +73,7 @@ class Solver():
         coil = self.coil
         denc = self.denc
         net_input_set = self.net_input_set
-        syn_radial_ri_ts = self.syn_radial_ri_ts    
+        real_radial_ri_ts = self.real_radial_ri_ts    
         step = self.step
 
         self.t1 = time.time()
@@ -82,19 +82,19 @@ class Solver():
             idx_fr=np.random.randint(0, Nfr)
             idx_frs = range(min(idx_fr, Nfr-batch_size), min(idx_fr+batch_size, Nfr))
 
-            net_input_z = torch.autograd.Variable(net_input_set[idx_frs,:,:,:],requires_grad=False) # net_input_set: e.g., torch.Size([23*num_cycle, 1, 8, 8])   
+            net_input_z = torch.autograd.Variable(net_input_set[idx_frs,:,:,:],requires_grad=False) # net_input_set: e.g., torch.Size([1400, 1, 8, 8]) 
 
-            out_sp = self.net(net_input_z) # e.g., spatial domain output (img) torch.Size([batch_size, 2, 128, 128])
+            out_sp = self.net(net_input_z) # e.g., spatial domain output (img) torch.Size([batch_size, 2, 256, 256)
             out_sp = out_sp.permute(0,2,3,1)
             out_kt = []
             gt_kt = []
 
             for idx_b in range(batch_size):
                 idx_fr = idx_frs[idx_b]
-                angle = self.set_ang[idx_fr*Nfibo*Nvec:(idx_fr+1)*Nfibo*Nvec,:] # (3328, 2) 3328 = 13*256
-                gt_kt.append(syn_radial_ri_ts[0,:,idx_fr*Nfibo:(idx_fr+1)*Nfibo,:,:].reshape(-1,2)) # syn_radial_ri_ts torch.Size([1, 32, 299, 256, 2])
+                angle = self.set_ang[np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr-1,idx_fr+opt.fib_ed),:,:] # (5, 512, 2)             
+                gt_kt.append(real_radial_ri_ts[0,:,np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr-1,idx_fr+opt.fib_ed),:,:].reshape(-1,2)) # real_radial_ri_ts: torch.Size([1, 20, 1400, 512, 2]) => torch.Size([51200, 2]), 51200 = 20x5x512
                 self.mynufft.X=out_sp[idx_b,:,:,:]
-                out_kt.append(self.mynufft(angle,angle.shape[0]//Nvec,Nvec,Nc,coil,denc[:,:angle.shape[0]//Nvec,:]).reshape(-1,2))
+                out_kt.append(self.mynufft(angle.reshape((-1,2)),angle.shape[0],Nvec,Nc,coil,denc).reshape(-1,2))
 
             out_kt = torch.cat(out_kt)
             gt_kt = torch.cat(gt_kt)
@@ -127,43 +127,18 @@ class Solver():
         out_abs = out_abs-out_abs.min()
         out_abs = out_abs/out_abs.max()
         
-        syn_radial_img_ts = torch.from_numpy(self.syn_radial_img[:,:,idx_fr]).to(self.dev).float()
-        gt_cartesian_img_ts = torch.from_numpy(self.gt_cartesian_img[:,:,idx_fr]).to(self.dev).float()
+        real_radial_img_ts = self.real_radial_img.to(self.dev).float()
 
-        images_grid = torch.cat([syn_radial_img_ts[None],out_abs[None],gt_cartesian_img_ts[None]],dim=2)
+        images_grid = torch.cat([torch.flip(real_radial_img_ts[None],[1]),torch.flip(out_abs[None],[1])],dim=2)
         images_grid = F.interpolate(images_grid.unsqueeze(0), scale_factor = 4).squeeze(0)
         self.writer.add_image('recon_image', images_grid, step)
-        
-        # Get Average PSNR and SSIM values for entire frames
-        psnr_val = 0
-        ssim_val = 0
-        for idx_fr in range(self.Nfr):
-            ims = torch_to_np(self.net(self.net_input_set[idx_fr,:,:,:][None]))
-            tmp_ims=np.sqrt(ims[0,:,:]**2+ims[1,:,:]**2)
-            tmp_ims -= tmp_ims.min()
-            tmp_ims /= tmp_ims.max()
-            psnr_val += psnr(self.gt_cartesian_img[:,:,idx_fr], tmp_ims, data_range=1.0)
-            ssim_val += ssim(self.gt_cartesian_img[:,:,idx_fr], tmp_ims, data_range=1.0)
-        
-        psnr_val = psnr_val/self.Nfr
-        ssim_val = ssim_val/self.Nfr
-        self.writer.add_scalar('metrics/psnr', psnr_val, step)
-        self.writer.add_scalar('metrics/ssim', ssim_val, step)
-        
         self.t2 = time.time()
-
-        if psnr_val >= self.best_psnr:
-            self.best_psnr, self.best_psnr_step = psnr_val, step
-        if ssim_val >= self.best_ssim:
-            self.best_ssim, self.best_ssim_step = ssim_val, step
-        
         self.save(step)
 
         curr_lr = self.scheduler.get_lr()[0]
         eta = (self.t2-self.t1) * (max_steps-step) /self.opt.save_period / 3600
-        print("[{}/{}] {:.2f} {:.4f} (Best PSNR: {:.2f} SSIM {:.4f} @ {} step) LR: {}, ETA: {:.1f} hours"
-            .format(step, max_steps, psnr_val, ssim_val, self.best_psnr, self.best_ssim, self.best_psnr_step,
-             curr_lr, eta))
+        print("[{}/{}] LR: {}, ETA: {:.1f} hours"
+            .format(step, max_steps, curr_lr, eta))
 
         self.t1 = time.time()
 
@@ -240,122 +215,64 @@ class Solver():
         ani.save(self.opt.ckpt_root+'/final_video.mp4')
         print('video saved')
     
-    def prepare_dataset(self):   
+    def prepare_dataset(self):  
         fname = self.opt.fname
         num_cycle = self.opt.num_cycle
         Nfibo = self.opt.Nfibo
-        seq=np.squeeze(sio.loadmat(fname)['data']) # numpy array (128, 128, 23, 32), complex128, kt-space data
-        coil=sio.loadmat(fname)['b1'].astype(np.complex64) #  numpy array, coil sensitivity
-        coil = np.transpose(coil,(2,0,1)) # (32, 128, 128)
-
-        Nc=np.shape(seq)[-1] # 32 number of coils
-        Nvec=np.shape(seq)[0]*2 # 256 radial sampling number (virtual k-space)
-        Nfr = np.shape(seq)[2]*num_cycle # 23 number of frames * num_cycle (13)
-        img_size=np.shape(seq)[0] # 128        
-
-        gt_cartesian_kt = seq[...,np.newaxis].astype(np.complex64) # (128, 128, 23, 32, 1), complex64, kt-space data 
-        gt_cartesian_kt_ri = np.concatenate((np.real(gt_cartesian_kt),np.imag(gt_cartesian_kt)),axis=-1) # (128, 128, 23, 32, 2), float32, kt-space data 
-        gt_cartesian_kt_ri = np.transpose(gt_cartesian_kt_ri,(3,2,0,1,4)) # (32, 23, 128, 128, 2), kt-space data
-        gt_cartesian_kt_ri = np.concatenate([gt_cartesian_kt_ri]*num_cycle,axis = 1) # (32, 23*num_cycle, 128, 128, 2), kt-space data
-        gt_cartesian_kt = np.concatenate([gt_cartesian_kt]*num_cycle,axis=2) # (128, 128, 23*num_cycle, 32, 1), complex64, kt-space data 
-
-
-        w1=np.linspace(1,0,Nvec//2) # [1,...,0] length 128
-        w2=np.linspace(0,1,Nvec//2) # [0,...,1] length 128
-        w=np.concatenate((w1,w2),axis=0)[np.newaxis,np.newaxis] # [1,...0,0,...,1] (1, 1, 256)
-        wr=np.tile(w,(Nc,Nfibo,1)) # (32, 13, 256) repeated w
-        denc = wr.astype(np.complex64)
+        # ========================= #
+        # # == For spoke-sharing == #
+        # ========================= #        
+        self.opt.fib_st=Nfibo//2
+        if np.mod(Nfibo,2)==0:
+            self.opt.fib_ed=Nfibo//2
+        else:
+            self.opt.fib_ed=Nfibo//2+1 
         
-        # For visualization: GT full sampled images
-        gt_cartesian = gt_cartesian_kt.transpose(3,2,0,1,4) # (32, 23*num_cycle, 128, 128, 1)
-        gt_cartesian = gt_cartesian[:,:,:,:,0] # (32, 23*num_cycle, 128, 128)
-        gt_cartesian_img = np.zeros((img_size,img_size,Nfr)) # (128, 128, 23*num_cycle)
-        for idx_fr in range(Nfr):
-            curr_gt_cartesian_img = np.sqrt((abs(gt_cartesian[:,idx_fr,:,:]*coil)**2).mean(0))
-            curr_gt_cartesian_img -= curr_gt_cartesian_img.min()
-            curr_gt_cartesian_img /= curr_gt_cartesian_img.max()
-            gt_cartesian_img[:,:,idx_fr] = curr_gt_cartesian_img
+        seq=1e3*np.squeeze(sio.loadmat(fname)['rawData']).astype(np.complex64) # numpy array (512, 1600, 20), complex128, kt-space data
+        seq = seq[:,200:,:] # Removing the first 200 data frame, which have bleaching noise (by Kyong)
+        coil=sio.loadmat(fname)['C'].astype(np.complex64) #  numpy array, coil sensitivity
+        coil = np.transpose(coil,(2,0,1)) # (20, 256, 256)
+
+        Nc=np.shape(seq)[-1] # 20 number of coils
+        Nvec=np.shape(seq)[0] # 512 radial sampling number (virtual k-space)
+        Nfr = np.shape(seq)[1] # 1400 number of frames
+        img_size=np.shape(coil)[-1] # 256        
+        
+        denc=sio.loadmat(fname)['W'] # (512, 1600)
+        denc=denc[:,0] # all are same, so just take one.
+        real_radial = np.transpose(seq,(2,1,0))[...,np.newaxis]
+        real_radial_ri = np.concatenate((np.real(real_radial),np.imag(real_radial)),axis=3) # real and imaginary
+    
+        real_radial_ri*=np.tile(denc.astype(np.float32).reshape(1,1,-1,1),[Nc,Nfr,1,2])
+        real_radial_ri_ts=np_to_torch(real_radial_ri).to(self.dev).detach()
 
         # 111.246 degree - golden angle | 23.63 degree - tiny golden angle
-        gA=111.246
-        one_vec_y=np.linspace(-3.1293208599090576,3.1293208599090576,num=Nvec)[...,np.newaxis]
-        one_vec_x=np.zeros((Nvec,1))
-        one_vec=np.concatenate((one_vec_y,one_vec_x),axis=1) # (256, 2)
-
-        
-        Nang=Nfibo*Nfr
-        set_ang=np.zeros((Nang*Nvec,2),np.double) # (76544, 2)
-        for i in range(Nang):
-            theta=gA*i
-            c, s = np.cos(theta), np.sin(theta)
-            R = np.array(((c,-s), (s, c)))
-            for j in range(Nvec):
-                tmp=np.matmul(R,one_vec[j,:])
-                set_ang[i*Nvec+j,0]=tmp[0]
-                set_ang[i*Nvec+j,1]=tmp[1]
-
-        data_raw_fname = 'syn_radial_data_cycle%s.mat'%num_cycle        
-        # This sampling process takes a bit of time, so we save it once and use it after. 
-        if os.path.isfile(data_raw_fname):
-            data_raw = sio.loadmat(data_raw_fname)['data_raw']
-            print('file loaded: %s' % data_raw_fname)
-            
-        else: 
-            data_raw=np.zeros((Nc,Nfibo*Nfr,Nvec)).astype(np.complex64)
-            
-            # Generate down-sampled data            
-
-            for idx_fr in range(Nfr): # Fourier transform per each frame
-                print('%s/%s'%(idx_fr,Nfr), '\r', end='')
-                angle=set_ang[idx_fr*Nfibo*Nvec:(idx_fr+1)*Nfibo*Nvec,:]
-                mynufft_test = Mypnufft_cardiac_test(img_size,angle,Nfibo,Nvec,Nc,coil,denc)
-                tmp=mynufft_test.forward(gt_cartesian_kt_ri[:,idx_fr,:,:,:])
-                tmp_c=tmp[...,0]+1j*tmp[...,1]
-                tmp_disp=tmp_c.reshape(Nc,Nfibo,Nvec) # (32, 13, 256)
-
-                data_raw[:,idx_fr*Nfibo:(idx_fr+1)*Nfibo,:]=tmp_disp
-
-            data_raw=np.transpose(data_raw,(2,1,0))# (256, 299, 32), x-f data
-            sio.savemat(data_raw_fname,{'data_raw':data_raw})
-            print('file saved: %s' % data_raw_fname)
-
-        
-        # Generate down-sampled image
-        syn_radial_ri = np.concatenate((np.real(data_raw[...,np.newaxis]),np.imag(data_raw[...,np.newaxis])),axis=3)
-        syn_radial_ri = np.transpose(syn_radial_ri,(2,1,0,3)) # (32, 299, 256, 2)
-        syn_radial_ri_ts = np_to_torch(syn_radial_ri.astype(np.float32)).cuda().detach() # torch.Size([1, 32, 299, 256, 2]), added batch dimension
+        rawang=sio.loadmat(fname)['K'] # (512, 1600, 1, 2)
+        ang_np=np.squeeze(rawang[:,:,:,0]+1j*rawang[:,:,:,1]).astype(np.complex64)
+        ang_np=ang_np[:,200:] # (512, 1400)
+        set_ang=np.zeros((Nfr,Nvec,2))
+        for idx_fr in range(Nfr):
+            set_ang[idx_fr,:,0]=np.real(ang_np[:,idx_fr])*2.*np.pi
+            set_ang[idx_fr,:,1]=np.imag(ang_np[:,idx_fr])*2.*np.pi        
         
         # Just for visualization: naive inverse Fourier of undersampled data
-        # syn_radial_img
-        syn_radial_img_fname = 'syn_radial_img_cycle%s.mat'%num_cycle
-        if os.path.isfile(syn_radial_img_fname):            
-            syn_radial_img = sio.loadmat(syn_radial_img_fname)['syn_radial_img']
-            print('file loaded: %s' % syn_radial_img_fname)
-        else: 
-            syn_radial_img=np.zeros((img_size,img_size,Nfr)) # (128, 128, 23)
-            print('Get images of the synthetic radial (down-sampled) data')
-            for idx_fr in range(Nfr):
-                print('%s/%s'%(idx_fr,Nfr), '\r', end='')
-                angle=set_ang[idx_fr*Nfibo*Nvec:(idx_fr+1)*Nfibo*Nvec,:] # (3328, 2)
-                inp= torch_to_np(syn_radial_ri_ts[:,:,idx_fr*Nfibo:(idx_fr+1)*Nfibo,:,:]) # inp: (32, 13, 256, 2), removed batch dimension
+        # real_radial_ri # inp: (20, 1400, 512, 2), removed batch dimension
+        print('... calculating nufft for full spoke: gold standard')
+        inp = real_radial_ri_ts[0,...]
+        mynufft_test = Mypnufft_grasp_test(img_size,set_ang.reshape((-1,2)),inp.shape[1],Nvec,Nc,coil,denc)
+        real_radial_img_ri=mynufft_test.backward(inp.reshape((-1,2)))
+        real_radial_img = (real_radial_img_ri[:,:,0]**2+real_radial_img_ri[:,:,1]**2)**.5 
+        real_radial_img -= real_radial_img.min()
+        real_radial_img /= real_radial_img.max()
+        
 
-                mynufft_test = Mypnufft_cardiac_test(img_size,angle,Nfibo,Nvec,Nc,coil,denc)
-                gt_re_np=mynufft_test.backward(inp.reshape((-1,2))) # (128, 128, 2)
-                syn_radial_img[:,:,idx_fr]=np.sqrt(gt_re_np[:,:,0]**2+gt_re_np[:,:,1]**2) # (128, 128)
-                syn_radial_img[:,:,idx_fr] = syn_radial_img[:,:,idx_fr]-syn_radial_img[:,:,idx_fr].min()
-                syn_radial_img[:,:,idx_fr] = syn_radial_img[:,:,idx_fr]/syn_radial_img[:,:,idx_fr].max()
-
-            sio.savemat(syn_radial_img_fname,{'syn_radial_img':syn_radial_img})
-            print('file saved: %s' % syn_radial_img_fname)
-
-        self.mynufft = Mypnufft_cardiac(img_size,Nc)
+        self.mynufft = Mypnufft_grasp(img_size,Nc)
         self.set_ang = set_ang
         self.img_size = img_size
         self.Nc = Nc
         self.Nfr = Nfr
         self.Nvec = Nvec
         self.coil = coil
-        self.denc = denc
-        self.syn_radial_img = syn_radial_img
-        self.syn_radial_ri_ts = syn_radial_ri_ts
-        self.gt_cartesian_img = gt_cartesian_img
+        self.denc = denc        
+        self.real_radial_ri_ts = real_radial_ri_ts
+        self.real_radial_img = real_radial_img
