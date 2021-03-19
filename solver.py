@@ -99,9 +99,9 @@ class Solver():
             out_kt = torch.cat(out_kt)
             gt_kt = torch.cat(gt_kt)
 
-            mse_loss = self.loss_fn(gt_kt[...,0],out_kt[...,0])+ self.loss_fn(gt_kt[...,1],out_kt[...,1])*(self.img_size)**2
+            total_loss = self.loss_fn(gt_kt[...,0],out_kt[...,0])+ self.loss_fn(gt_kt[...,1],out_kt[...,1])
 
-            total_loss = mse_loss     
+            total_loss *= (self.img_size)**2       
             self.optimizer.zero_grad()
             total_loss.backward()   
             self.optimizer.step()
