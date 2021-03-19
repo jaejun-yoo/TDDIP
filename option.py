@@ -63,7 +63,7 @@ def get_option():
     opt = parse_args()    
     now = datetime.now()
     curr_time = now.strftime("%Y%m%d_%H%M%S")      
-    opt.ckpt_folder = opt.dataset+"_"#+ curr_time    
+    opt.ckpt_folder = opt.dataset+"_"+ curr_time    
     opt.ckpt_root = "./logs/"+opt.ckpt_folder      
     make_template(opt)
     
