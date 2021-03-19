@@ -13,7 +13,7 @@ def main():
 
     if torch.cuda.is_available(): 
         os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"    
-        torch.cuda.set_device(1)
+        torch.cuda.set_device(3)
         torch.backends.cudnn.enabled = True
         torch.backends.cudnn.benchmark =True
         print("Current device: idx%s | %s" %(torch.cuda.current_device(), torch.cuda.get_device_name(torch.cuda.current_device())))

@@ -99,9 +99,9 @@ class Solver():
             out_kt = torch.cat(out_kt)
             gt_kt = torch.cat(gt_kt)
 
-            mse_loss = self.loss_fn(gt_kt[...,0],out_kt[...,0])+ self.loss_fn(gt_kt[...,1],out_kt[...,1])*(self.img_size)**2
+            total_loss = self.loss_fn(gt_kt[...,0],out_kt[...,0])+ self.loss_fn(gt_kt[...,1],out_kt[...,1])
 
-            total_loss = mse_loss     
+            total_loss *= (self.img_size)**2     
             self.optimizer.zero_grad()
             total_loss.backward()   
             self.optimizer.step()
@@ -207,9 +207,9 @@ class Solver():
         for idx_fr in range(self.Nfr):
             tmp_ims=np.sqrt(ims[idx_fr][0,:,:]**2+ims[idx_fr][1,:,:]**2)
             tmp_ims -= tmp_ims.min()
-            tmp_ims /= tmp_ims.max()    
+            tmp_ims /= tmp_ims.max()               
             ttl = plt.text(128, -5, idx_fr, horizontalalignment='center', fontsize = 20)
-            vid.append([plt.imshow(tmp_ims, animated=True, cmap = 'gray', vmax=0.5),ttl])
+            vid.append([plt.imshow(np.flip(tmp_ims,0), animated=True, cmap = 'gray', vmax=0.5),ttl])
         ani = animation.ArtistAnimation(fig, vid, interval=50, blit=True, repeat_delay=1000)
 
         ani.save(self.opt.ckpt_root+'/final_video.mp4')
