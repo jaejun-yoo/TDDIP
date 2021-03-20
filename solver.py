@@ -75,7 +75,7 @@ class Solver():
         net_input_set = self.net_input_set
         real_radial_ri_ts = self.real_radial_ri_ts    
         step = self.step
-
+        
         self.t1 = time.time()
         while step < opt.max_steps:
             # randomly pick frames to train (batch, default = 1)
@@ -91,7 +91,7 @@ class Solver():
 
             for idx_b in range(batch_size):
                 idx_fr = idx_frs[idx_b]
-                angle = self.set_ang[np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr-1,idx_fr+opt.fib_ed),:,:] # (5, 512, 2)             
+                angle = self.set_ang[np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr,idx_fr+opt.fib_ed),:,:] # (5, 512, 2)             
                 gt_kt.append(real_radial_ri_ts[0,:,np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr-1,idx_fr+opt.fib_ed),:,:].reshape(-1,2)) # real_radial_ri_ts: torch.Size([1, 20, 1400, 512, 2]) => torch.Size([51200, 2]), 51200 = 20x5x512
                 self.mynufft.X=out_sp[idx_b,:,:,:]
                 out_kt.append(self.mynufft(angle.reshape((-1,2)),angle.shape[0],Nvec,Nc,coil,denc).reshape(-1,2))
@@ -113,7 +113,7 @@ class Solver():
                 self.summary_and_save(step,out_sp, idx_fr)
 
             step += 1
-            self.step = step
+            self.step = step            
         
         self.writer.close()   
         self.save_video()

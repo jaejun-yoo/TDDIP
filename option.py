@@ -7,6 +7,7 @@ def parse_args():
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--gpu_num", type=int, default=0)
 
     # models
     parser.add_argument("--model", type=str, default="basicnet")
@@ -63,7 +64,7 @@ def get_option():
     opt = parse_args()    
     now = datetime.now()
     curr_time = now.strftime("%Y%m%d_%H%M%S")      
-    opt.ckpt_folder = opt.dataset+"_"+ curr_time    
+    opt.ckpt_folder = opt.dataset+"_"+curr_time    
     opt.ckpt_root = "./logs/"+opt.ckpt_folder      
     make_template(opt)
     
