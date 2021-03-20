@@ -240,7 +240,7 @@ class Solver():
         ani.save(self.opt.ckpt_root+'/final_video.mp4')
         print('video saved')
     
-    def prepare_dataset(self):   
+    def prepare_dataset(self):           
         fname = self.opt.fname
         num_cycle = self.opt.num_cycle
         Nfibo = self.opt.Nfibo
@@ -284,7 +284,7 @@ class Solver():
 
         
         Nang=Nfibo*Nfr
-        set_ang=np.zeros((Nang*Nvec,2),np.double) # (76544, 2)
+        set_ang=np.zeros((Nang*Nvec,2),np.double) # (995072, 2)
         for i in range(Nang):
             theta=gA*i
             c, s = np.cos(theta), np.sin(theta)
@@ -294,8 +294,9 @@ class Solver():
                 set_ang[i*Nvec+j,0]=tmp[0]
                 set_ang[i*Nvec+j,1]=tmp[1]
 
-        data_raw_fname = 'syn_radial_data_cycle%s.mat'%num_cycle        
+        data_raw_fname = 'syn_radial_data_cycle%s_Nfibo%s.mat'%(num_cycle, Nfibo)
         # This sampling process takes a bit of time, so we save it once and use it after. 
+        
         if os.path.isfile(data_raw_fname):
             data_raw = sio.loadmat(data_raw_fname)['data_raw']
             print('file loaded: %s' % data_raw_fname)
@@ -303,12 +304,13 @@ class Solver():
         else: 
             data_raw=np.zeros((Nc,Nfibo*Nfr,Nvec)).astype(np.complex64)
             
-            # Generate down-sampled data            
-
+            # Generate down-sampled data 
+            
             for idx_fr in range(Nfr): # Fourier transform per each frame
                 print('%s/%s'%(idx_fr,Nfr), '\r', end='')
                 angle=set_ang[idx_fr*Nfibo*Nvec:(idx_fr+1)*Nfibo*Nvec,:]
                 mynufft_test = Mypnufft_cardiac_test(img_size,angle,Nfibo,Nvec,Nc,coil,denc)
+                
                 tmp=mynufft_test.forward(gt_cartesian_kt_ri[:,idx_fr,:,:,:])
                 tmp_c=tmp[...,0]+1j*tmp[...,1]
                 tmp_disp=tmp_c.reshape(Nc,Nfibo,Nvec) # (32, 13, 256)
@@ -327,7 +329,7 @@ class Solver():
         
         # Just for visualization: naive inverse Fourier of undersampled data
         # syn_radial_img
-        syn_radial_img_fname = 'syn_radial_img_cycle%s.mat'%num_cycle
+        syn_radial_img_fname = 'syn_radial_img_cycle%s_Nfibo%s.mat'%(num_cycle, Nfibo)
         if os.path.isfile(syn_radial_img_fname):            
             syn_radial_img = sio.loadmat(syn_radial_img_fname)['syn_radial_img']
             print('file loaded: %s' % syn_radial_img_fname)
