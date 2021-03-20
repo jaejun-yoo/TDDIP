@@ -286,7 +286,7 @@ class Solver():
         Nang=Nfibo*Nfr
         set_ang=np.zeros((Nang*Nvec,2),np.double) # (995072, 2)
         for i in range(Nang):
-            theta=gA*i
+            theta=gA*(i+1)
             c, s = np.cos(theta), np.sin(theta)
             R = np.array(((c,-s), (s, c)))
             for j in range(Nvec):
@@ -305,8 +305,7 @@ class Solver():
             data_raw=np.zeros((Nc,Nfibo*Nfr,Nvec)).astype(np.complex64)
             
             # Generate down-sampled data 
-            
-            for idx_fr in range(Nfr): # Fourier transform per each frame
+            for idx_fr in range(1,Nfr): # Fourier transform per each frame
                 print('%s/%s'%(idx_fr,Nfr), '\r', end='')
                 angle=set_ang[idx_fr*Nfibo*Nvec:(idx_fr+1)*Nfibo*Nvec,:]
                 mynufft_test = Mypnufft_cardiac_test(img_size,angle,Nfibo,Nvec,Nc,coil,denc)

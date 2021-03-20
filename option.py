@@ -6,10 +6,11 @@ from datetime import datetime
 def parse_args():    
     now = datetime.now()
     curr_time = now.strftime("%Y%m%d_%H%M%S")
-    ckpt_folder = "retro_"+ curr_time
+    ckpt_folder = "retro_"+curr_time
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--gpu_num", type=int, default=0)
 
     # models
     parser.add_argument("--model", type=str, default="basicnet")
