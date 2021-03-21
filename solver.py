@@ -130,7 +130,7 @@ class Solver():
         
         real_radial_img_ts = self.real_radial_img.to(self.dev).float()
 
-        images_grid = torch.cat([torch.flip(real_radial_img_ts[None],[1]),torch.flip(out_abs[None],[1])],dim=2)
+        images_grid = torch.cat([torch.flip(out_abs[None],[1]),torch.flip(real_radial_img_ts[None],[1])],dim=2)
         images_grid = F.interpolate(images_grid.unsqueeze(0), scale_factor = 4).squeeze(0)
         self.writer.add_image('recon_image', images_grid, step)
         self.t2 = time.time()
