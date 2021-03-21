@@ -16,6 +16,7 @@ from utils.common_utils import *
 from Mypnufft_mc_func_grasp_norm_v2 import *
 
 import h5py
+import mat73
 import matplotlib.pyplot as plt
 from matplotlib import animation
 
@@ -92,7 +93,7 @@ class Solver():
             for idx_b in range(batch_size):
                 idx_fr = idx_frs[idx_b]
                 angle = self.set_ang[np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr,idx_fr+opt.fib_ed),:,:] # (5, 512, 2)             
-                gt_kt.append(real_radial_ri_ts[0,:,np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr-1,idx_fr+opt.fib_ed),:,:].reshape(-1,2)) # real_radial_ri_ts: torch.Size([1, 20, 1400, 512, 2]) => torch.Size([51200, 2]), 51200 = 20x5x512
+                gt_kt.append(real_radial_ri_ts[0,:,np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr,idx_fr+opt.fib_ed),:,:].reshape(-1,2)) # real_radial_ri_ts: torch.Size([1, 20, 1400, 512, 2]) => torch.Size([51200, 2]), 51200 = 20x5x512
                 self.mynufft.X=out_sp[idx_b,:,:,:]
                 out_kt.append(self.mynufft(angle.reshape((-1,2)),angle.shape[0],Nvec,Nc,coil,denc).reshape(-1,2))
 
@@ -129,7 +130,7 @@ class Solver():
         
         real_radial_img_ts = self.real_radial_img.to(self.dev).float()
 
-        images_grid = torch.cat([torch.flip(real_radial_img_ts[None],[1]),torch.flip(out_abs[None],[1])],dim=2)
+        images_grid = torch.cat([torch.flip(out_abs[None],[1]),torch.flip(real_radial_img_ts[None],[1])],dim=2)
         images_grid = F.interpolate(images_grid.unsqueeze(0), scale_factor = 4).squeeze(0)
         self.writer.add_image('recon_image', images_grid, step)
         self.t2 = time.time()
@@ -227,36 +228,33 @@ class Solver():
             self.opt.fib_ed=Nfibo//2
         else:
             self.opt.fib_ed=Nfibo//2+1 
-        
-        seq=1e3*np.squeeze(sio.loadmat(fname)['rawData']).astype(np.complex64) # numpy array (512, 1600, 20), complex128, kt-space data
-        seq = seq[:,100:,:] # Removing the first 100 data frame
-        coil=sio.loadmat(fname)['C'].astype(np.complex64) #  numpy array, coil sensitivity
-        coil = np.transpose(coil,(2,0,1)) # (20, 256, 256)
+           
+        arrays = mat73.loadmat(fname)
+        seq = arrays['kdata'].astype(np.complex64) # numpy array (2496, 2500, 2), complex128, kt-space data        
+        coil  = arrays['csm'].astype(np.complex64) # numpy array (256, 256, 2)
+        coil = np.transpose(coil,(2,0,1)) # numpy array (2, 256, 256)
 
-        Nc=np.shape(seq)[-1] # 20 number of coils
-        Nvec=np.shape(seq)[0] # 512 radial sampling number (virtual k-space)
-        Nfr = np.shape(seq)[1] # 1400 number of frames
+        Nc=np.shape(seq)[-1] # 2 number of coils
+        Nvec=np.shape(seq)[0] # 2496 spiral sampling number (virtual k-space)
+        Nfr = np.shape(seq)[1] # 2500 number of frames
         img_size=np.shape(coil)[-1] # 256        
         
-        denc=sio.loadmat(fname)['W'] # (512, 1600)
-        denc=denc[:,0] # all are same, so just take one.
-        real_radial = np.transpose(seq,(2,1,0))[...,np.newaxis]
+        denc=np.ones(Nvec) # (2496, 1)
+        real_radial = np.transpose(seq,(2,1,0))[...,np.newaxis] # numpy array (2, 2500, 2496)
         real_radial_ri = np.concatenate((np.real(real_radial),np.imag(real_radial)),axis=3) # real and imaginary
     
-        real_radial_ri*=np.tile(denc.astype(np.float32).reshape(1,1,-1,1),[Nc,Nfr,1,2])
         real_radial_ri_ts=np_to_torch(real_radial_ri).to(self.dev).detach()
 
-        # 111.246 degree - golden angle | 23.63 degree - tiny golden angle
-        rawang=sio.loadmat(fname)['K'] # (512, 1600, 1, 2)
-        ang_np=np.squeeze(rawang[:,:,:,0]+1j*rawang[:,:,:,1]).astype(np.complex64)
-        ang_np=ang_np[:,200:] # (512, 1400)
+        # spiral sampling
+        ang_np = arrays['k'].astype(np.complex64) # numpy array (2496, 2500), complex128, k-trajectory
+        ang_np /=img_size # min max -.5 ~.5 for nufft
         set_ang=np.zeros((Nfr,Nvec,2))
         for idx_fr in range(Nfr):
             set_ang[idx_fr,:,0]=np.real(ang_np[:,idx_fr])*2.*np.pi
             set_ang[idx_fr,:,1]=np.imag(ang_np[:,idx_fr])*2.*np.pi        
         
         # Just for visualization: naive inverse Fourier of undersampled data
-        # real_radial_ri # inp: (20, 1400, 512, 2), removed batch dimension
+        # real_radial_ri # inp: (2, 2500, 2496, 2), removed batch dimension
         print('... calculating nufft for full spoke: gold standard')
         inp = real_radial_ri_ts[0,...]
         mynufft_test = Mypnufft_grasp_test(img_size,set_ang.reshape((-1,2)),inp.shape[1],Nvec,Nc,coil,denc)
