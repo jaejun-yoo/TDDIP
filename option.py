@@ -16,9 +16,9 @@ def parse_args():
 
     # dataset
     parser.add_argument("--dataset", type=str, default="real") # retro | real
-    parser.add_argument("--fname", type=str, default="dataset1.mat") # series11_2.mat p =~18
+    parser.add_argument("--fname", type=str, default="series11_2.mat") # series11_2.mat p =~18
     parser.add_argument("--Nfibo", type=int, default=5) # 13: retro | 5: real
-    parser.add_argument("--num_cycle", type=int, default=13) 
+    parser.add_argument("--num_cycle", type=int, default=18) # series11_2.mat p =~18
     
     # training setups
     parser.add_argument("--lr", type=float, default=1e-3)
@@ -64,7 +64,7 @@ def get_option():
     opt = parse_args()    
     now = datetime.now()
     curr_time = now.strftime("%Y%m%d_%H%M%S")      
-    opt.ckpt_folder = opt.dataset+"_"+curr_time    
+    opt.ckpt_folder = opt.dataset+"_"#+curr_time    
     opt.ckpt_root = "./logs/"+opt.ckpt_folder      
     make_template(opt)
     

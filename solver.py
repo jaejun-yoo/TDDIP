@@ -229,7 +229,7 @@ class Solver():
             self.opt.fib_ed=Nfibo//2+1 
         
         seq=1e3*np.squeeze(sio.loadmat(fname)['rawData']).astype(np.complex64) # numpy array (512, 1600, 20), complex128, kt-space data
-        seq = seq[:,200:,:] # Removing the first 200 data frame, which have bleaching noise (by Kyong)
+        seq = seq[:,100:,:] # Removing the first 100 data frame
         coil=sio.loadmat(fname)['C'].astype(np.complex64) #  numpy array, coil sensitivity
         coil = np.transpose(coil,(2,0,1)) # (20, 256, 256)
 

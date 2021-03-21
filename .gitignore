@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# ipynb
+*.ipynb
+*.ipynb_checkpoints
+
 # mat file
 *.mat
 
