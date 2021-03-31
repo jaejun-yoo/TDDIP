@@ -75,7 +75,6 @@ class Solver():
         net_input_set = self.net_input_set
         syn_radial_ri_ts = self.syn_radial_ri_ts    
         step = self.step
-
         self.t1 = time.time()
         while step < opt.max_steps:
             # randomly pick frames to train (batch, default = 1)
@@ -99,7 +98,7 @@ class Solver():
             out_kt = torch.cat(out_kt)
             gt_kt = torch.cat(gt_kt)
 
-            mse_loss = self.loss_fn(gt_kt[...,0],out_kt[...,0])+ self.loss_fn(gt_kt[...,1],out_kt[...,1])*(self.img_size)**2
+            mse_loss = (self.loss_fn(gt_kt[...,0],out_kt[...,0]) + self.loss_fn(gt_kt[...,1],out_kt[...,1]))*(self.img_size)**2
 
             total_loss = mse_loss     
             self.optimizer.zero_grad()
