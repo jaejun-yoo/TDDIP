@@ -46,7 +46,7 @@ def make_template(opt):
         opt.input_depth = 1
         opt.num_output_ch = 2
         opt.Nr = 1
-        opt.ndf = 128
+        opt.ndf = 128 #original 128
         opt.up_factor = 16
         opt.num_ups = int(np.log2(opt.up_factor))
         opt.need_tanh = False
@@ -55,8 +55,30 @@ def make_template(opt):
         opt.upsample_mode = 'nearest'        
         opt.latent_dim = 3
         opt.style_dim = 64
-        opt.depth = 0
+        opt.depth = 1
         opt.description = '%s: basic net, %s, %s cycles, Nfibo=%s' % (opt.dataset, opt.input_type, opt.num_cycle, opt.Nfibo)
+    elif "deep_decoder" in opt.model:
+        opt.latent_dim = 3
+        opt.style_dim = 64
+        opt.depth = 2
+        opt.learn_bn = True
+        opt.inp_ch = 1 #must 
+        opt.num_output_ch = 2 #number of output channels for the image
+        opt.need_sigmoid = False
+        opt.up_factor = 16
+        opt.num_ups = int(np.log2(opt.up_factor))
+        opt.channel_nums = [128]*(opt.num_ups + 1)
+    elif "baseline_decoder_hybrid" in opt.model:
+        opt.input_depth = 1
+        opt.num_output_ch = 2
+        opt.Nr = 1 #number of intermediate layers
+        opt.up_factor = 16
+        opt.num_ups = int(np.log2(opt.up_factor))
+        opt.latent_dim = 3
+        opt.style_dim = 64
+        opt.depth = 1
+        opt.num_channels = [1,32,16,16,16,128,opt.num_output_ch]
+        opt.layer_mask=[False]*opt.num_ups
     else:
         raise NotImplementedError('what is it?')
         
