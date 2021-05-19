@@ -63,7 +63,10 @@ class Net(nn.Module):
                             nn.BatchNorm2d(num_channels_out),
                             nn.ReLU(True)]
 
-        layers += [ nn.Conv2d(num_channels[-2], num_channels[-1], kernel_size=3, stride=1, padding=1, bias=False)]
+        if (layer_mask[-1]):
+            layers += [ nn.Conv2d(num_channels[-2], num_channels[-1], kernel_size=1, stride=1, padding=0, bias=False) ]
+        else: 
+            layers += [ nn.Conv2d(num_channels[-2], num_channels[-1], kernel_size=3, stride=1, padding=1, bias=False) ]
 
         self.net = nn.Sequential(*layers)
         

@@ -35,12 +35,21 @@ def parse_args():
     parser.add_argument("--isresume", type=str , default=None) # ckpt_filepath, e.g., "./logs/retro_20210221_142941/500.pt"
     parser.add_argument("--save_period", type=int, default=500)
     parser.add_argument("--description", type=str, default="")
-    parser.add_argument("--prune", type=str, default=1.0)
+    parser.add_argument("--measure_L", type=bool, default=False)
+
+    #pruning 
+    parser.add_argument("--prune", type=bool, default=False)
 
     return parser.parse_args()
 
 
 def make_template(opt):
+
+    #pruning
+    if (opt.prune):
+        opt.pruneSteps = [600] #prune at these steps during training
+        opt.method = "interkernel" # possible opts : 'interkernel' 'structuredln' 
+        opt.amount = 0.4 #prune this proportion of weights each time 
 
     # model
     if "basicnet" in opt.model:
@@ -61,7 +70,7 @@ def make_template(opt):
     elif "deep_decoder" in opt.model:
         opt.latent_dim = 3
         opt.style_dim = 64
-        opt.depth = 2
+        opt.depth = 3
         opt.learn_bn = True
         opt.inp_ch = 1 #must 
         opt.num_output_ch = 2 #number of output channels for the image
@@ -72,14 +81,14 @@ def make_template(opt):
     elif "baseline_decoder_hybrid" in opt.model:
         opt.input_depth = 1
         opt.num_output_ch = 2
-        opt.Nr = 1 #number of intermediate layers
+        opt.Nr = 0 #number of intermediate layers
         opt.up_factor = 16
         opt.num_ups = int(np.log2(opt.up_factor))
         opt.latent_dim = 3
         opt.style_dim = 64
-        opt.depth = 1
-        opt.num_channels = [1,32,16,16,16,32,opt.num_output_ch]
-        opt.layer_mask=[False]*opt.num_ups
+        opt.depth = 3 #number of mapping network layers 
+        opt.num_channels = [1,64,64,64,64,64,opt.num_output_ch]
+        opt.layer_mask=[True]*(opt.num_ups + 1) 
     elif "separable" in opt.model:
         opt.input_depth = 1
         opt.num_output_ch = 2
@@ -89,7 +98,7 @@ def make_template(opt):
         opt.latent_dim = 3
         opt.style_dim = 64
         opt.depth = 1
-        opt.num_channels = [1,32,32,32,32,32,opt.num_output_ch]
+        opt.num_channels = [1,128,128,128,128,128,opt.num_output_ch]
         opt.kernel_size = 3
         opt.layer_mask=[True]*opt.num_ups
     else:

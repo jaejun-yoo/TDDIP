@@ -12,6 +12,8 @@ from tensorboardX import SummaryWriter
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 
+from utils.measureLips import spectralNorms
+from utils.prune import *
 from utils.common_utils import *
 from Mypnufft_mc_func_cardiac import *
 
@@ -84,7 +86,7 @@ class Solver():
             net_input_z = torch.autograd.Variable(net_input_set[idx_frs,:,:,:],requires_grad=False) # net_input_set: e.g., torch.Size([23*num_cycle, 1, 8, 8])   
 
             out_sp = self.net(net_input_z) # e.g., spatial domain output (img) torch.Size([batch_size, 2, 128, 128])
-            out_sp = out_sp.permute(0,2,3,1)
+            out_sp = out_sp.permute(0,2,3,1) 
             out_kt = []
             gt_kt = []
 
@@ -102,7 +104,12 @@ class Solver():
 
             total_loss = mse_loss     
             self.optimizer.zero_grad()
-            total_loss.backward()   
+            total_loss.backward()
+
+            if (opt.prune):
+                #prune after both forward and backward passes have been called
+                pruneOnStep(opt, step, self.net) #if step included in pruning steps, prune the network
+
             self.optimizer.step()
             self.scheduler.step()
             
@@ -160,9 +167,18 @@ class Solver():
 
         curr_lr = self.scheduler.get_lr()[0]
         eta = (self.t2-self.t1) * (max_steps-step) /self.opt.save_period / 3600
-        print("[{}/{}] {:.2f} {:.4f} (Best PSNR: {:.2f} SSIM {:.4f} @ {} step) LR: {}, ETA: {:.1f} hours"
-            .format(step, max_steps, psnr_val, ssim_val, self.best_psnr, self.best_ssim, self.best_psnr_step,
-             curr_lr, eta))
+
+        output_string = "[{}/{}] {:.2f} {:.4f} (Best PSNR: {:.2f} SSIM {:.4f} @ {} step) LR: {}, ETA: {:.1f} hours".format(step, max_steps, psnr_val, ssim_val, self.best_psnr, self.best_ssim, self.best_psnr_step,curr_lr, eta)
+
+        if (self.opt.measure_L):
+            norms = spectralNorms(self.net.net) 
+            if (self.mapnet != None):
+                norms.extend(spectralNorms(self.mapnet.net))
+            L = np.product(norms)
+            output_string += ", L: {:.4f}".format(L)
+            self.writer.add_scalar('metrics/spectralnorm', L, step)
+
+        print(output_string)
 
         self.t1 = time.time()
 
