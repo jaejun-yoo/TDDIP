@@ -53,6 +53,9 @@ docker pull jaejun2004/dip-dynamicmri
 python main.py --PLOT
 ```
 
+### Datasets
+Please contact jaejun.yoo88@gmail.com
+
 ## Citation
 If you find this work useful for your research, please cite (will be updated soon):
 ```
