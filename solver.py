@@ -80,7 +80,7 @@ class Solver():
         self.t1 = time.time()
         while step < opt.max_steps:
             # randomly pick frames to train (batch, default = 1)
-            idx_fr=np.random.randint(0, Nfr)
+            idx_fr=5*np.random.randint(0, Nfr/Nfibo)
             idx_frs = range(min(idx_fr, Nfr-batch_size), min(idx_fr+batch_size, Nfr))
 
             net_input_z = torch.autograd.Variable(net_input_set[idx_frs,:,:,:],requires_grad=False) # net_input_set: e.g., torch.Size([1400, 1, 8, 8]) 
@@ -92,8 +92,10 @@ class Solver():
 
             for idx_b in range(batch_size):
                 idx_fr = idx_frs[idx_b]
-                angle = self.set_ang[np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr,idx_fr+opt.fib_ed),:,:] # (5, 512, 2)             
-                gt_kt.append(real_radial_ri_ts[0,:,np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr,idx_fr+opt.fib_ed),:,:].reshape(-1,2)) # real_radial_ri_ts: torch.Size([1, 20, 1400, 512, 2]) => torch.Size([51200, 2]), 51200 = 20x5x512
+                angle = self.set_ang[idx_fr:idx_fr+Nfibo,:,:] # (5, 512, 2)             
+                gt_kt.append(real_radial_ri_ts[0,:,idx_fr:idx_fr+Nfibo,:,:].reshape(-1,2)) # real_radial_ri_ts: torch.Size([1, 20, 1400, 512, 2]) => torch.Size([51200, 2]), 51200 = 20x5x512
+#                 angle = self.set_ang[np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr,idx_fr+opt.fib_ed),:,:] # (5, 512, 2)             
+#                 gt_kt.append(real_radial_ri_ts[0,:,np.maximum(0,idx_fr-opt.fib_st):np.minimum(Nfr,idx_fr+opt.fib_ed),:,:].reshape(-1,2)) # real_radial_ri_ts: torch.Size([1, 20, 1400, 512, 2]) => torch.Size([51200, 2]), 51200 = 20x5x512
                 self.mynufft.X=out_sp[idx_b,:,:,:]
                 out_kt.append(self.mynufft(angle.reshape((-1,2)),angle.shape[0],Nvec,Nc,coil,denc).reshape(-1,2))
 
@@ -210,7 +212,7 @@ class Solver():
             tmp_ims -= tmp_ims.min()
             tmp_ims /= tmp_ims.max()               
             ttl = plt.text(128, -5, idx_fr, horizontalalignment='center', fontsize = 20)
-            vid.append([plt.imshow(np.flip(tmp_ims,0), animated=True, cmap = 'gray', vmax=0.5),ttl])
+            vid.append([plt.imshow(np.flip(tmp_ims,0), animated=True, cmap = 'gray'),ttl])
         ani = animation.ArtistAnimation(fig, vid, interval=50, blit=True, repeat_delay=1000)
 
         ani.save(self.opt.ckpt_root+'/final_video.mp4')
