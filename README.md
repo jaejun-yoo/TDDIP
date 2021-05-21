@@ -1,7 +1,13 @@
 # TD-DIP (IEEE Transactions on Medical Imaging, 2021)
 The Official PyTorch Implementation of [Time-Dependent Deep Image Prior for Dynamic MRI](https://arxiv.org/abs/1910.01684)
 
-Jaejun Yoo, Kyong Hwan Jin, Harshit Gupta, Jerome Yerly, Matthias Stuber, Michael Unser
+Jaejun Yoo<sup>1</sup>, Kyong Hwan Jin<sup>1,2</sup>, Harshit Gupta<sup>1</sup>, Jerome Yerly<sup>2,3,4</sup>, Matthias Stuber<sup>2,3,4</sup>, Michael Unser<sup>1</sup>
+
+<sub>**Affiliations:**</sub> <sup>1</sup> <sub>EPFL,</sub>
+<sup>2</sup> <sub>DGIS,T</sub>
+<sup>3</sup> <sub>CHUV,</sub>
+<sup>4</sup> <sub>UNIL,</sub>
+<sup>5</sup> <sub>CIBM</sub>
 
 We propose a novel unsupervised deep-learning-based algorithm for dynamic magnetic resonance imaging (MRI) reconstruction. Dynamic MRI requires rapid data acquisition for the study of moving organs such as the heart. We introduce a generalized version of the deep-image-prior approach, which optimizes the weights of a reconstruction network to fit a sequence of sparsely acquired dynamic MRI measurements. Our method needs neither prior training nor additional data. 
 In particular, for cardiac images, it does not require the marking of heartbeats or the reordering of spokes.  The key ingredients of our method are threefold: 1) a fixed low-dimensional manifold that encodes the temporal variations of images; 2) a network that maps the manifold into a more expressive latent space; and 3) a convolutional neural network that generates a dynamic series of MRI images from the latent variables and that favors their consistency with the measurements in _k_-space. Our method outperforms the state-of-the-art methods quantitatively and qualitatively in both retrospective and real fetal cardiac datasets. 
