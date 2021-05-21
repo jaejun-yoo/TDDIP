@@ -66,10 +66,11 @@ Please contact jaejun.yoo88@gmail.com
 ## Citation
 If you find this work useful for your research, please cite (will be updated soon):
 ```
-@article{Yoo2019time,
+@article{yoo2019time,
   title={Time-dependent deep image prior for dynamic MRI},
   author={Yoo, Jaejun and Jin, Kyong Hwan and Gupta, Harshit and Yerly, Jerome and Stuber, Matthias and Unser, Michael},
-  journal={arXiv preprint arXiv:1910.01684},
+  journal={arXiv e-prints},
+  pages={arXiv--1910},
   year={2019}
 }
 ```
