@@ -15,6 +15,7 @@ To the best of our knowledge, this is the first unsupervised deep-learning-based
 
 ## Updates
 * 20 May 2021: Paper accepted at IEEE TMI 2021.
+* September 2020: Paper submitted to IEEE TMI.
 
 ## Getting Started
 
