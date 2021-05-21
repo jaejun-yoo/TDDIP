@@ -99,7 +99,7 @@ class Solver():
             out_kt = torch.cat(out_kt)
             gt_kt = torch.cat(gt_kt)
 
-            total_loss = self.loss_fn(gt_kt[...,0],out_kt[...,0])+ self.loss_fn(gt_kt[...,1],out_kt[...,1])
+            total_loss = self.loss_fn(out_kt[...,0],gt_kt[...,0])+ self.loss_fn(out_kt[...,1],gt_kt[...,1])
 
             total_loss *= (self.img_size)**2       
             self.optimizer.zero_grad()
