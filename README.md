@@ -4,7 +4,7 @@ The Official PyTorch Implementation of [Time-Dependent Deep Image Prior for Dyna
 Jaejun Yoo<sup>1</sup>, Kyong Hwan Jin<sup>1,2</sup>, Harshit Gupta<sup>1</sup>, Jerome Yerly<sup>2,3,4</sup>, Matthias Stuber<sup>2,3,4</sup>, Michael Unser<sup>1</sup>
 
 <sub>**Affiliations:**</sub> <sup>1</sup> <sub>EPFL,</sub>
-<sup>2</sup> <sub>DGIS,T</sub>
+<sup>2</sup> <sub>DGIST,</sub>
 <sup>3</sup> <sub>CHUV,</sub>
 <sup>4</sup> <sub>UNIL,</sub>
 <sup>5</sup> <sub>CIBM</sub>
