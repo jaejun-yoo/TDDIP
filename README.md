@@ -14,8 +14,8 @@ In particular, for cardiac images, it does not require the marking of heartbeats
 To the best of our knowledge, this is the first unsupervised deep-learning-based method that can reconstruct the continuous variation of dynamic MRI sequences with high spatial resolution. 
 
 ## Updates
-* 20 May 2021: Paper accepted at IEEE TMI 2021.
-* September 2020: Paper submitted to IEEE TMI.
+* 20 May 2021: Paper accepted at IEEE TMI.
+* September 2019: Paper submitted to IEEE TMI.
 
 ## Getting Started
 
