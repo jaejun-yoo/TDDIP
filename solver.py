@@ -65,6 +65,9 @@ class Solver():
         self.best_psnr, self.best_psnr_step = 0, 0
         self.best_ssim, self.best_ssim_step = 0, 0
 
+        #flag for pruning 
+        self.pruned = False 
+
     def fit(self):
         opt = self.opt
         batch_size = opt.batch_size   
@@ -107,8 +110,14 @@ class Solver():
             total_loss.backward()
 
             if (opt.prune):
-                #prune after both forward and backward passes have been called
-                pruneOnStep(opt, step, self.net) #if step included in pruning steps, prune the network
+
+                if self.pruned and (step % opt.save_period == 0 or step == opt.max_steps-1): 
+                    removeReparam(self.net)
+                    self.pruned = False 
+
+                if (step in opt.pruneSteps):  
+                    pruneOnStep(opt, step, self.net)
+                    self.pruned = True 
 
             self.optimizer.step()
             self.scheduler.step()
@@ -122,8 +131,13 @@ class Solver():
             self.step = step
         
         self.writer.close()   
+
+        if (opt.save_residuals):
+            #if save residuals, save also video of residuals
+            self.save_video_residuals()
+
         self.save_video()
-                
+
     def summary_and_save(self, step, out_sp, idx_fr):        
         max_steps = self.opt.max_steps
         
@@ -146,7 +160,7 @@ class Solver():
         for idx_fr in range(self.Nfr):
             ims = torch_to_np(self.net(self.net_input_set[idx_fr,:,:,:][None]))
             tmp_ims=np.sqrt(ims[0,:,:]**2+ims[1,:,:]**2)
-            tmp_ims -= tmp_ims.min()
+            tmp_ims -= tmp_ims.min() #here the 
             tmp_ims /= tmp_ims.max()
             psnr_val += psnr(self.gt_cartesian_img[:,:,idx_fr], tmp_ims, data_range=1.0)
             ssim_val += ssim(self.gt_cartesian_img[:,:,idx_fr], tmp_ims, data_range=1.0)
@@ -207,6 +221,7 @@ class Solver():
                 'net_state_dict': self.net.state_dict(), 
                 'optimizer_state_dict': self.optimizer.state_dict(),
                 'scheduler_state_dict': self.scheduler.state_dict(),
+                'mapnet_state_dict' : self.mapnet.state_dict() #TODO: add this only if mapnet included
                 }
         best_scores = {
                 'best_psnr': self.best_psnr,
@@ -214,8 +229,6 @@ class Solver():
                 'best_psnr_step': self.best_psnr_step,
                 'best_ssim_step': self.best_ssim_step,
                 }
-        if self.opt.input_type.endswith('mapping'):            
-            ckptdict['mapnet_state_dict']: self.mapnet.state_dict() 
                 
         torch.save(ckptdict, save_path)
         with open(os.path.join(self.opt.ckpt_root, 'best_scores.json'), 'w') as f:
@@ -254,6 +267,36 @@ class Solver():
 
         ani.save(self.opt.ckpt_root+'/final_video.mp4')
         print('video saved')
+
+    def save_video_residuals(self):
+        
+        ims = []
+
+        for idx_fr in range(self.Nfr):
+
+            im = torch_to_np(self.net(self.net_input_set[idx_fr,:,:,:][None]))
+
+            out = np.sqrt(im[0,:,:]**2+im[1,:,:]**2) 
+            out -= out.min()
+            out /= out.max()
+
+            ref = self.gt_cartesian_img[:,:,idx_fr]
+
+            diff = np.absolute(ref - out)
+
+            ims.append(diff)
+        
+        print('creating video of residuals...')
+        fig = plt.figure(figsize=(10, 10))
+        vid = []
+        for idx_fr in range(self.Nfr):
+            frame = ims[idx_fr]
+            ttl = plt.text(128, -5, idx_fr, horizontalalignment='center', fontsize = 20)
+            vid.append([plt.imshow(frame, animated=True, cmap = 'gray', vmin=0.0, vmax=0.5),ttl])
+        ani = animation.ArtistAnimation(fig, vid, interval=50, blit=True, repeat_delay=1000)
+
+        ani.save(self.opt.ckpt_root+'/final_residuals.mp4')
+        print('video of residuals saved')
     
     def prepare_dataset(self):   
         fname = self.opt.fname

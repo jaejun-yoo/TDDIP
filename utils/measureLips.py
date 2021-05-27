@@ -4,7 +4,7 @@ from scipy.linalg import svdvals
 def spectralNorms(seq):
 
     """
-    given sequential model, compute spectral norm of each module (with reshaping). 
+    given sequential model, compute spectral norm of the reshaped module weights. 
     """
 
     norms = []

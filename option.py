@@ -1,5 +1,6 @@
 import argparse
 import os
+import importlib
 import numpy as np
 from datetime import datetime
 
@@ -36,6 +37,7 @@ def parse_args():
     parser.add_argument("--save_period", type=int, default=500)
     parser.add_argument("--description", type=str, default="")
     parser.add_argument("--measure_L", type=bool, default=False)
+    parser.add_argument("--save_residuals", type=bool, default=False)
 
     #pruning 
     parser.add_argument("--prune", type=bool, default=False)
@@ -47,9 +49,9 @@ def make_template(opt):
 
     #pruning
     if (opt.prune):
-        opt.pruneSteps = [600] #prune at these steps during training
+        opt.pruneSteps = [700] #prune at these steps during training
         opt.method = "interkernel" # possible opts : 'interkernel' 'structuredln' 
-        opt.amount = 0.4 #prune this proportion of weights each time 
+        opt.amount = 0.5 #prune this proportion of weights each time 
 
     # model
     if "basicnet" in opt.model:
@@ -98,7 +100,7 @@ def make_template(opt):
         opt.latent_dim = 3
         opt.style_dim = 64
         opt.depth = 1
-        opt.num_channels = [1,128,128,128,128,128,opt.num_output_ch]
+        opt.num_channels = [1,64,64,64,64,64,opt.num_output_ch]
         opt.kernel_size = 3
         opt.layer_mask=[True]*opt.num_ups
     else:

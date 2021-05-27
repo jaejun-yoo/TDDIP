@@ -58,8 +58,6 @@ def pruneOnStep(opt, step, model):
             if isinstance(module, nn.Conv2d):
                 if opt.method == 'interkernel':
                     interkernel_structured(module, name="weight", amount=opt.amount)
-                    #this method can currently be applied just once (non iteratively), so here we remove the rest of the pruning steps
-                    opt.pruneSteps = []
                 else:   
                     prune.ln_structured(module, name="weight", amount=opt.amount, n=1, dim=1)
 
@@ -70,15 +68,15 @@ def pruneOnStep(opt, step, model):
 
         print("PRUNING STEP - sparsity in conv. layers (%) : " , sum(sparsities)/len(sparsities))
 
-def removeReparam(modle):
+def removeReparam(model):
 
     """ 
-    Remove the reparametrization from pruning 
+    Remove the reparametrization from pruning - necessary before saving model
     """ 
 
     for name, module in model.named_modules():
         if isinstance(module, nn.Conv2d):
-            prune.remove(module)
+            prune.remove(module, "weight")
 
 
 
