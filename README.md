@@ -77,14 +77,14 @@ python main.py
 Please contact jaejun.yoo88@gmail.com
 
 ## Citation
-If you find this work useful for your research, please cite (will be updated soon):
+If you find this work useful for your research, please cite:
 ```
-@article{yoo2019time,
-  title={Time-dependent deep image prior for dynamic MRI},
+@article{yoo2021time,
+  title={Time-Dependent Deep Image Prior for Dynamic MRI},
   author={Yoo, Jaejun and Jin, Kyong Hwan and Gupta, Harshit and Yerly, Jerome and Stuber, Matthias and Unser, Michael},
-  journal={arXiv e-prints},
-  pages={arXiv--1910},
-  year={2019}
+  journal={IEEE Transactions on Medical Imaging},
+  year={2021},
+  publisher={IEEE}
 }
 ```
 
