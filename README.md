@@ -73,10 +73,10 @@ docker pull jaejun2004/dip-dynamicmri
 python main.py
 ```
 
-### Datasets
-Please contact jaejun.yoo88@gmail.com
+## Datasets
+Currently we cannot open the dataset. Please contact jaejun.yoo88@gmail.com
 
-### License
+## License
 All material, excluding the dataset, is made available under [Creative Commons BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) license by Jaejun Yoo. You can use, redistribute, and adapt the material for non-commercial purposes, as long as you give appropriate credit by citing our paper and indicating any changes that you've made.
 
 ## Citation
