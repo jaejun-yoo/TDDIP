@@ -70,7 +70,7 @@ python main.py --istest --isresume ./logs/retro_YMDHMS/0.pt
 # Pull docker environment
 docker pull jaejun2004/dip-dynamicmri
 # Run main.py
-python main.py --PLOT
+python main.py
 ```
 
 ### Datasets
