@@ -23,48 +23,47 @@ from IPython.core.debugger import set_trace
 
 
 class Solver():
-    def __init__(self, module, opt):
-        
+    def __init__(self, module, opt):        
         self.opt = opt
-        self.dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")       
+        self.dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")     
+             
+        self.prepare_dataset()        
         
-        self.prepare_dataset()
-        self.writer = SummaryWriter(opt.ckpt_root)
+        self.step = 0
+        self.t1, self.t2 = None, None
+        self.best_psnr, self.best_psnr_step = 0, 0
+        self.best_ssim, self.best_ssim_step = 0, 0        
         
         self.net = module.Net(opt).to(self.dev)
         self.net_input_set = get_input_manifold(opt.input_type, opt.num_cycle, self.Nfr).to(self.dev)
         
         p = get_params(opt.opt_over, self.net, self.net_input_set)
+        # Compute number of parameters          
+        s  = sum([np.prod(list(pnb.size())) for pnb in p]);
+        print ('# params: %d' % s)
         
         if opt.input_type.endswith('mapping'):
-            self.mapnet = module.MappingNet(opt).to(self.dev)            
+            self.mapnet = module.MappingNet(opt).to(self.dev)
             print('... adding params of mapping network ...')
             p += self.mapnet.parameters()
-            self.net_input_set = self.mapnet(self.net_input_set).reshape((self.Nfr,1,
-                                                    self.img_size//self.opt.up_factor, 
-                                                    self.img_size//self.opt.up_factor))
             
         # Compute number of parameters          
         s  = sum([np.prod(list(pnb.size())) for pnb in p]);
         print ('# params: %d' % s)
 
-        self.step = 0
         self.optimizer = torch.optim.Adam(p, lr=opt.lr)  
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 
                                                     step_size=opt.step_size, 
                                                     gamma=opt.gamma)
+        self.loss_fn = nn.MSELoss()        
         if opt.isresume is not None:
             self.load(opt.isresume)
-        
-        self.loss_fn = nn.MSELoss()
-        
-
-        self.t1, self.t2 = None, None
-        self.best_psnr, self.best_psnr_step = 0, 0
-        self.best_ssim, self.best_ssim_step = 0, 0
 
     def fit(self):
         opt = self.opt
+        self.writer = SummaryWriter(opt.ckpt_root)   
+        self.t1 = time.time()
+        
         batch_size = opt.batch_size   
         Nc = self.Nc
         Nfr = self.Nfr
@@ -74,17 +73,17 @@ class Solver():
         denc = self.denc
         net_input_set = self.net_input_set
         syn_radial_ri_ts = self.syn_radial_ri_ts    
-        step = self.step
+        step = self.step       
 
-        self.t1 = time.time()
         while step < opt.max_steps:
             # randomly pick frames to train (batch, default = 1)
             idx_fr=np.random.randint(0, Nfr)
             idx_frs = range(min(idx_fr, Nfr-batch_size), min(idx_fr+batch_size, Nfr))
 
-            net_input_z = torch.autograd.Variable(net_input_set[idx_frs,:,:,:],requires_grad=False) # net_input_set: e.g., torch.Size([23*num_cycle, 1, 8, 8])   
-
-            out_sp = self.net(net_input_z) # e.g., spatial domain output (img) torch.Size([batch_size, 2, 128, 128])
+            net_input_z = self.net_input_set[idx_fr,:].reshape((batch_size,-1))
+            net_input_w = self.mapnet(net_input_z)
+            net_input_w = net_input_w.reshape((batch_size,1,opt.style_size,opt.style_size)) 
+            out_sp = self.net(net_input_w) # e.g., spatial domain output (img) torch.Size([batch_size, 2, 128, 128])
             out_sp = out_sp.permute(0,2,3,1)
             out_kt = []
             gt_kt = []
@@ -101,87 +100,98 @@ class Solver():
 
             total_loss = self.loss_fn(out_kt[...,0],gt_kt[...,0])+ self.loss_fn(out_kt[...,1],gt_kt[...,1])
 
-            total_loss *= (self.img_size)**2       
+#             total_loss *= (self.img_size)**2       
             self.optimizer.zero_grad()
             total_loss.backward()   
             self.optimizer.step()
             self.scheduler.step()
-            
             self.writer.add_scalar('total loss/training_loss (mse)', total_loss, step)
             
-            if opt.PLOT and (step % opt.save_period == 0 or step == opt.max_steps-1):
-                self.summary_and_save(step,out_sp, idx_fr)
+            if (not self.opt.noPLOT) and (step % opt.save_period == 0 or step == opt.max_steps-1):                
+                self.evaluate()
 
             step += 1
             self.step = step
         
         self.writer.close()   
-        self.save_video()
-                
-    def summary_and_save(self, step, out_sp, idx_fr):        
+        
+    @torch.no_grad()
+    def evaluate(self):  
+        step = self.step
         max_steps = self.opt.max_steps
-        
-        # For visualization
-        idx_fr = np.random.randint(0, self.Nfr)
-        out_abs=(out_sp[0,:,:,0]**2+out_sp[0,:,:,1]**2)**.5 
-        out_abs = out_abs-out_abs.min()
-        out_abs = out_abs/out_abs.max()
-        
-        syn_radial_img_ts = torch.from_numpy(self.syn_radial_img[:,:,idx_fr]).to(self.dev).float()
-        gt_cartesian_img_ts = torch.from_numpy(self.gt_cartesian_img[:,:,idx_fr]).to(self.dev).float()
-
-        images_grid = torch.cat([syn_radial_img_ts[None],out_abs[None],gt_cartesian_img_ts[None]],dim=2)
-        images_grid = F.interpolate(images_grid.unsqueeze(0), scale_factor = 4).squeeze(0)
-        self.writer.add_image('recon_image', images_grid, step)
-        
+        # For visualizations
         # Get Average PSNR and SSIM values for entire frames
-        psnr_val = 0
-        ssim_val = 0
+        psnr_val_list = []
+        ssim_val_list = []
+        ims = []
+        inp = []
+        net_input_w_set = self.mapnet(self.net_input_set).reshape((self.Nfr,1,self.opt.style_size,self.opt.style_size)) 
         for idx_fr in range(self.Nfr):
-            ims = torch_to_np(self.net(self.net_input_set[idx_fr,:,:,:][None]))
-            tmp_ims=np.sqrt(ims[0,:,:]**2+ims[1,:,:]**2)
+            tmp_ims = self.net(net_input_w_set[idx_fr:idx_fr+1,...])
+            tmp_ims = torch_to_np(tmp_ims).astype('float64') 
+            tmp_ims= np.sqrt(tmp_ims[0,:,:]**2+tmp_ims[1,:,:]**2)
             tmp_ims -= tmp_ims.min()
             tmp_ims /= tmp_ims.max()
-            psnr_val += psnr(self.gt_cartesian_img[:,:,idx_fr], tmp_ims, data_range=1.0)
-            ssim_val += ssim(self.gt_cartesian_img[:,:,idx_fr], tmp_ims, data_range=1.0)
+            syn_radial_img = self.syn_radial_img[:,:,idx_fr]
+            gt_cartesian_img = self.gt_cartesian_img[:,:,idx_fr]            
+            psnr_val_list += [psnr(gt_cartesian_img, tmp_ims)]
+            ssim_val_list += [ssim(gt_cartesian_img, tmp_ims)]  
+            net_input_w = torch_to_np(net_input_w_set[idx_fr,:])
+            images_grid = np.concatenate([syn_radial_img[None], tmp_ims[None], gt_cartesian_img[None]],axis=2)
+            ims.append(images_grid)
+            inp.append(net_input_w)
         
-        psnr_val = psnr_val/self.Nfr
-        ssim_val = ssim_val/self.Nfr
-        self.writer.add_scalar('metrics/psnr', psnr_val, step)
-        self.writer.add_scalar('metrics/ssim', ssim_val, step)
+        psnr_val = np.array(psnr_val_list).sum()/self.Nfr
+        ssim_val = np.array(ssim_val_list).sum()/self.Nfr  
         
-        self.t2 = time.time()
+        if self.opt.istest:
+            print("Saving h5/video (PSNR {:.2f}, SSIM {:.4f} @ {} step)".format(psnr_val, ssim_val, step))
+            self.save_video(inp, ims, psnr_val_list, ssim_val_list)
+        else:
+            self.writer.add_scalar('metrics/psnr', psnr_val, step)
+            self.writer.add_scalar('metrics/ssim', ssim_val, step)
+            self.writer.add_image('recon_image', ims[1], step)
 
-        if psnr_val >= self.best_psnr:
-            self.best_psnr, self.best_psnr_step = psnr_val, step
-        if ssim_val >= self.best_ssim:
-            self.best_ssim, self.best_ssim_step = ssim_val, step
+            self.t2 = time.time()
+
+            if psnr_val >= self.best_psnr:
+                self.best_psnr, self.best_psnr_step = psnr_val, step
+                self.issave = True
+            if ssim_val >= self.best_ssim:
+                self.best_ssim, self.best_ssim_step = ssim_val, step
+                self.issave = True
+
+            if self.issave:    
+                self.save(step)
+                self.issave = False
+
+            curr_lr = self.scheduler.get_lr()[0]
+            eta = (self.t2-self.t1) * (max_steps-step) /self.opt.save_period / 3600
+            print("[{}/{}] {:.2f} {:.4f} (Best PSNR: {:.2f} SSIM {:.4f} @ {} step) LR: {}, ETA: {:.1f} hours"
+                .format(step, max_steps, psnr_val, ssim_val, self.best_psnr, self.best_ssim, self.best_psnr_step,
+                 curr_lr, eta))
+
+            self.t1 = time.time()
         
-        self.save(step)
-
-        curr_lr = self.scheduler.get_lr()[0]
-        eta = (self.t2-self.t1) * (max_steps-step) /self.opt.save_period / 3600
-        print("[{}/{}] {:.2f} {:.4f} (Best PSNR: {:.2f} SSIM {:.4f} @ {} step) LR: {}, ETA: {:.1f} hours"
-            .format(step, max_steps, psnr_val, ssim_val, self.best_psnr, self.best_ssim, self.best_psnr_step,
-             curr_lr, eta))
-
-        self.t1 = time.time()
-
-    @torch.no_grad()
-    def evaluate(self):        
-        raise NotImplementedError("Evaluate function is not implemented yet.")
-        return 
+        if step == max_steps-1:            
+            self.save(step)
+            self.save_video(inp, ims, psnr_val_list, ssim_val_list)
 
     def load(self, path):
         checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
         self.net_input_set = checkpoint['net_input_set'].to(self.dev)
         self.net.load_state_dict(checkpoint['net_state_dict']) 
         self.net.to(self.dev)
+        if self.opt.input_type.endswith('mapping'):
+            self.mapnet.load_state_dict(checkpoint['mapnet_state_dict'])
+            self.mapnet.to(self.dev)
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.opt.step_size, gamma=self.opt.gamma) 
-        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        self.step = checkpoint['step']+1
-        
+        self.scheduler = checkpoint['scheduler']
+        self.step = checkpoint['step']
+        self.best_psnr, self.best_psnr_step = checkpoint['best_psnr'], checkpoint['best_psnr_step']
+        self.best_ssim, self.best_ssim_step = checkpoint['best_ssim'], checkpoint['best_ssim_step']
+        if not self.opt.istest:
+            self.step = checkpoint['step']+1        
         
     def save(self, step):        
         print('saving ... ')
@@ -189,9 +199,9 @@ class Solver():
         ckptdict = {
                 'step': step,
                 'net_input_set': self.net_input_set,
-                'net_state_dict': self.net.state_dict(), 
+                'net_state_dict': self.net.state_dict(),
                 'optimizer_state_dict': self.optimizer.state_dict(),
-                'scheduler_state_dict': self.scheduler.state_dict(),
+                'scheduler': self.scheduler,
                 }
         best_scores = {
                 'best_psnr': self.best_psnr,
@@ -199,45 +209,33 @@ class Solver():
                 'best_psnr_step': self.best_psnr_step,
                 'best_ssim_step': self.best_ssim_step,
                 }
+        ckptdict = {**ckptdict, **best_scores}
+        
         if self.opt.input_type.endswith('mapping'):            
-            ckptdict['mapnet_state_dict']: self.mapnet.state_dict() 
+            ckptdict['mapnet_state_dict'] = self.mapnet.state_dict()
                 
         torch.save(ckptdict, save_path)
         with open(os.path.join(self.opt.ckpt_root, 'best_scores.json'), 'w') as f:
             json.dump(best_scores, f)
-        
-    def save_video(self):
-        
-        #h5 save
-        ims = []
-        inp = []
 
-        for idx_fr in range(self.Nfr):
-            net_input_fr=self.net_input_set[idx_fr,:,:,:][np.newaxis,:,:,:]
-            out_HR_np = torch_to_np(self.net(net_input_fr))
-            net_input_fr=torch_to_np(net_input_fr)
-            ims.append(out_HR_np)
-            inp.append(net_input_fr)
-
-        f = h5py.File(os.path.join(self.opt.ckpt_root, 'final.h5'),'w')
-        f.create_dataset('input',data=inp,dtype=np.float32)
+    def save_video(self, inp, ims, psnr_val_list, ssim_val_list):      
+        f = h5py.File(os.path.join(self.opt.ckpt_root, 'final_{}.h5'.format(self.step)),'w')
+        f.create_dataset('input_w',data=inp,dtype=np.float32)
         f.create_dataset('data',data=ims,dtype=np.float32)
-        f.create_dataset('angle',data=self.set_ang,dtype=np.float32)
+        f.create_dataset('psnr_val_list',data=psnr_val_list,dtype=np.float32)
+        f.create_dataset('ssim_val_list',data=ssim_val_list,dtype=np.float32)
         f.close()
         print('h5 file saved.')
         
-        print('creating video.')
+        print('creating video, (vmax=0.5).')
         fig = plt.figure(figsize=(10, 10))
         vid = []
         for idx_fr in range(self.Nfr):
-            tmp_ims=np.sqrt(ims[idx_fr][0,:,:]**2+ims[idx_fr][1,:,:]**2)
-            tmp_ims -= tmp_ims.min()
-            tmp_ims /= tmp_ims.max()    
+            tmp_ims = ims[idx_fr].squeeze()    
             ttl = plt.text(128, -5, idx_fr, horizontalalignment='center', fontsize = 20)
             vid.append([plt.imshow(tmp_ims, animated=True, cmap = 'gray', vmax=0.5),ttl])
-        ani = animation.ArtistAnimation(fig, vid, interval=50, blit=True, repeat_delay=1000)
-
-        ani.save(self.opt.ckpt_root+'/final_video.mp4')
+        ani = animation.ArtistAnimation(fig, vid, interval=50, blit=True, repeat_delay=1000)        
+        ani.save(self.opt.ckpt_root+'/final_video_{}_{}.mp4'.format(os.path.basename(self.opt.ckpt_root),self.step))
         print('video saved')
     
     def prepare_dataset(self):           

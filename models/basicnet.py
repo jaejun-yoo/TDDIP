@@ -1,166 +1,73 @@
+import numpy as np
 import torch
 import torch.nn as nn 
+
+
+def conv(in_channels, out_channels, kernel_size, bias=True):
+    return nn.Conv2d(
+        in_channels, out_channels, kernel_size,
+        padding=(kernel_size//2), bias=bias)
+
 
 class MappingNet(nn.Module):
     def __init__(self, opt):
         super().__init__()
         
         latent_dim = opt.latent_dim
-        style_dim= opt.style_dim
+        style_dim = opt.style_size**2
+        hidden_dim = opt.hidden_dim
         depth = opt.depth
         
         layers = []
-        layers += [nn.Linear(latent_dim, 512)]
+        layers += [nn.Linear(latent_dim, hidden_dim)]
         layers += [nn.ReLU()]
         for _ in range(depth):
-            layers += [nn.Linear(512, 512)]
+            layers += [nn.Linear(hidden_dim, hidden_dim)]
             layers += [nn.ReLU()]
-        layers += [nn.Linear(512, style_dim)]
+        layers += [nn.Linear(hidden_dim, style_dim)]
         
         self.net = nn.Sequential(*layers)
 
     def forward(self, z):
         out = self.net(z)        
         return out
-    
+
+
 class Net(nn.Module):
     def __init__(self, opt):
         super().__init__() 
-        inp=opt.input_depth
+        inp_ch=opt.input_nch
         ndf=opt.ndf
-        out_ch=opt.num_output_ch
+        out_ch=opt.output_nch
         Nr=opt.Nr
-        num_ups=opt.num_ups
-        need_tanh=opt.need_tanh
+        num_ups=int(np.log2(opt.up_factor))
         need_bias=opt.need_bias
         upsample_mode=opt.upsample_mode
-        need_convT = opt.need_convT
-
-        layers = [ nn.Conv2d(inp, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-                    nn.BatchNorm2d(ndf),
-                    nn.ReLU(True)]
+        
+        layers = [conv(inp_ch, ndf, 3, bias=need_bias), 
+                  nn.BatchNorm2d(ndf),
+                  nn.ReLU(True)]
+        
         for ii in range(Nr):
-            layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-                        nn.BatchNorm2d(ndf),
-                        nn.ReLU(True)]
+            layers += [conv(ndf, ndf, 3, bias=need_bias),
+                       nn.BatchNorm2d(ndf),
+                       nn.ReLU(True)]
 
-        for i in range(num_ups-1):
-            if need_convT:
-                layers += [ nn.ConvTranspose2d(ndf, ndf, kernel_size=4, stride=2, padding=1, bias=need_bias),
-                            nn.BatchNorm2d(ndf),
-                            nn.ReLU(True)]
-
-                for ii in range(Nr):
-                    layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-                                nn.BatchNorm2d(ndf),
-                                nn.ReLU(True)]
-
-            else:
-                layers += [ nn.Upsample(scale_factor=2, mode=upsample_mode),
-                            nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-                            nn.BatchNorm2d(ndf),
-                            nn.ReLU(True)]
-                for ii in range(Nr):
-                    layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-                                nn.BatchNorm2d(ndf),
-                                nn.ReLU(True)]
-
-        if need_convT:
-            layers += [nn.ConvTranspose2d(ndf, ndf , 4, 2, 1, bias=need_bias),
-                            nn.BatchNorm2d(ndf),
-                            nn.ReLU(True)]
-
-            for ii in range(Nr):
-                layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-                            nn.BatchNorm2d(ndf),
-                            nn.ReLU(True)]
-            layers += [ nn.Conv2d(ndf, out_ch, kernel_size=3, stride=1, padding=1, bias=need_bias)]  
-        else:
+        for i in range(num_ups):
             layers += [nn.Upsample(scale_factor=2, mode=upsample_mode),
-                           nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
+                       conv(ndf, ndf, 3, bias=need_bias),                                         
+                       nn.BatchNorm2d(ndf),
+                       nn.ReLU(True)]
+            for ii in range(Nr):
+                layers += [conv(ndf, ndf, 3, bias=need_bias),
                            nn.BatchNorm2d(ndf),
                            nn.ReLU(True)]
 
-            for ii in range(Nr):
-                layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-                            nn.BatchNorm2d(ndf),
-                            nn.ReLU(True)]
-            layers += [ nn.Conv2d(ndf, out_ch, kernel_size=3, stride=1, padding=1, bias=need_bias)]
+        layers += [conv(ndf, out_ch, 3, bias=need_bias)]
 
-        if need_tanh:
-            layers += [ nn.Tanh(),]
 
         self.net = nn.Sequential(*layers)
         
-    def forward(self, z):
+    def forward(self, z, s=None):
         out = self.net(z)        
         return out
-    
-# def Net(opt):    
-#     inp=opt.input_depth
-#     ndf=opt.ndf
-#     out_ch=opt.num_output_ch
-#     Nr=opt.Nr
-#     num_ups=opt.num_ups
-#     need_tanh=opt.need_tanh
-#     need_bias=opt.need_bias
-#     upsample_mode=opt.upsample_mode
-#     need_convT = opt.need_convT
-
-#     layers = [ nn.Conv2d(inp, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-#                 nn.BatchNorm2d(ndf),
-#                 nn.ReLU(True)]
-#     for ii in range(Nr):
-#         layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-#                     nn.BatchNorm2d(ndf),
-#                     nn.ReLU(True)]
-    
-#     for i in range(num_ups-1):
-#         if need_convT:
-#             layers += [ nn.ConvTranspose2d(ndf, ndf, kernel_size=4, stride=2, padding=1, bias=need_bias),
-#                         nn.BatchNorm2d(ndf),
-#                         nn.ReLU(True)]
-
-#             for ii in range(Nr):
-#                 layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-#                             nn.BatchNorm2d(ndf),
-#                             nn.ReLU(True)]
-            
-#         else:
-#             layers += [ nn.Upsample(scale_factor=2, mode=upsample_mode),
-#                         nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-#                         nn.BatchNorm2d(ndf),
-#                         nn.ReLU(True)]
-#             for ii in range(Nr):
-#                 layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-#                             nn.BatchNorm2d(ndf),
-#                             nn.ReLU(True)]
-           
-#     if need_convT:
-#         layers += [nn.ConvTranspose2d(ndf, ndf , 4, 2, 1, bias=need_bias),
-#                         nn.BatchNorm2d(ndf),
-#                         nn.ReLU(True)]
-
-#         for ii in range(Nr):
-#             layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-#                         nn.BatchNorm2d(ndf),
-#                         nn.ReLU(True)]
-#         layers += [ nn.Conv2d(ndf, out_ch, kernel_size=3, stride=1, padding=1, bias=need_bias)]  
-#     else:
-#         layers += [nn.Upsample(scale_factor=2, mode=upsample_mode),
-#                        nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-#                        nn.BatchNorm2d(ndf),
-#                        nn.ReLU(True)]
-
-#         for ii in range(Nr):
-#             layers += [ nn.Conv2d(ndf, ndf, kernel_size=3, stride=1, padding=1, bias=need_bias),
-#                         nn.BatchNorm2d(ndf),
-#                         nn.ReLU(True)]
-#         layers += [ nn.Conv2d(ndf, out_ch, kernel_size=3, stride=1, padding=1, bias=need_bias)]
-    
-#     if need_tanh:
-#         layers += [ nn.Tanh(),]
-
-#     model =nn.Sequential(*layers)
-#     return model
-

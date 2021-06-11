@@ -49,8 +49,21 @@ cd ..
 Now you should be able to run the code: 
 
 ```
-python main.py --PLOT
+python main.py
 ```
+
+If you want to resume your training from epoch 0: 
+
+```
+python main.py --isresume ./logs/retro_YMDHMS/0.pt
+```
+
+If you want to test the model with weights saved at epoch 0: 
+
+```
+python main.py --istest --isresume ./logs/retro_YMDHMS/0.pt
+```
+
 #### Getting started with Docker
 
 ```
