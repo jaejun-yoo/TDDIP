@@ -20,10 +20,10 @@ class MappingNet(nn.Module):
         
         layers = []
         layers += [nn.Linear(latent_dim, hidden_dim)]
-        layers += [nn.ReLU()]
+        layers += [nn.LeakyReLU()]
         for _ in range(depth):
             layers += [nn.Linear(hidden_dim, hidden_dim)]
-            layers += [nn.ReLU()]
+            layers += [nn.LeakyReLU()]
         layers += [nn.Linear(hidden_dim, style_dim)]
         
         self.net = nn.Sequential(*layers)
@@ -45,23 +45,23 @@ class Net(nn.Module):
         upsample_mode=opt.upsample_mode
         
         layers = [conv(inp_ch, ndf, 3, bias=need_bias), 
-                  nn.BatchNorm2d(ndf),
-                  nn.ReLU(True)]
+                  nn.InstanceNorm2d(ndf, affine=False),
+                  nn.LeakyReLU()]
         
         for _ in range(Nr):
             layers += [conv(ndf, ndf, 3, bias=need_bias),
-                       nn.BatchNorm2d(ndf),
-                       nn.ReLU(True)]
+                       nn.InstanceNorm2d(ndf, affine=False),
+                       nn.LeakyReLU()]
 
         for _ in range(num_ups):
             layers += [nn.Upsample(scale_factor=2, mode=upsample_mode),
                        conv(ndf, ndf, 3, bias=need_bias),                                         
-                       nn.BatchNorm2d(ndf),
-                       nn.ReLU(True)]
+                       nn.InstanceNorm2d(ndf, affine=False),
+                       nn.LeakyReLU()]
             for _ in range(Nr):
                 layers += [conv(ndf, ndf, 3, bias=need_bias),
-                           nn.BatchNorm2d(ndf),
-                           nn.ReLU(True)]
+                           nn.InstanceNorm2d(ndf, affine=False),
+                           nn.LeakyReLU()]
 
         layers += [conv(ndf, out_ch, 3, bias=need_bias)]
 

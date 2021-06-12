@@ -45,11 +45,10 @@ class Solver():
         if opt.input_type.endswith('mapping'):
             self.mapnet = module.MappingNet(opt).to(self.dev)
             print('... adding params of mapping network ...')
-            p += self.mapnet.parameters()
-            
-        # Compute number of parameters          
-        s  = sum([np.prod(list(pnb.size())) for pnb in p]);
-        print ('# params: %d' % s)
+            p += self.mapnet.parameters()            
+            # Compute number of parameters          
+            s  = sum([np.prod(list(pnb.size())) for pnb in p]);
+            print ('# params: %d' % s)
 
         self.optimizer = torch.optim.Adam(p, lr=opt.lr)  
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 
