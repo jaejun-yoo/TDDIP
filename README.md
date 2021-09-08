@@ -14,6 +14,7 @@ In particular, for cardiac images, it does not require the marking of heartbeats
 To the best of our knowledge, this is the first unsupervised deep-learning-based method that can reconstruct the continuous variation of dynamic MRI sequences with high spatial resolution. 
 
 ## Updates
+* 08 September 2021: Add the retrospective dataset
 * 07 September 2021: Updated the nufft codebase repo 
     * **note** <s>git clone https://github.com/marchdf/python-nufft.git</s> <-- this (which I used for my Journal work) is now not available please use the link I put below.
 * 20 May 2021: Paper accepted at IEEE TMI.
